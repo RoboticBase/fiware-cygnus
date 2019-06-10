@@ -51,6 +51,8 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
+import java.io.UnsupportedEncodingException;
+
 /**
  * Sink for Elasticsearch.
  *
@@ -456,6 +458,14 @@ public class NGSIElasticsearchSink extends NGSISink {
             aggregator.initialize(events.get(0));
 
             for (NGSIEvent event : events) {
+                LOGGER.info("[XXXXXXXX" + event.getHeaders().toString() + "XXXXXXXX]");
+                try {
+                    LOGGER.info("[XXXXXXXX" + new String(event.getBody(), "utf-8") + "XXXXXXXX]");
+                } catch (UnsupportedEncodingException e) {
+                    //
+                }
+                LOGGER.info("[XXXXXXXX" + event.getOriginalCE() + "XXXXXXXX]");
+                LOGGER.info("[XXXXXXXX" + event.getMappedCE() + "XXXXXXXX]");
                 aggregator.aggregate(event);
             } // for
 
@@ -528,7 +538,6 @@ public class NGSIElasticsearchSink extends NGSISink {
          * @param event NGSIEvent to be aggregated
          */
         public void aggregate(NGSIEvent event) {
-            LOGGER.debug("!!!!!!!!!!!!!" + event + "!!!!!!!!!!!!");
             long notifiedRecvTimeTs = event.getRecvTimeTs();
 
             ContextElement contextElement = event.getContextElement();
