@@ -528,6 +528,7 @@ public class NGSIElasticsearchSink extends NGSISink {
          * @param event NGSIEvent to be aggregated
          */
         public void aggregate(NGSIEvent event) {
+            LOGGER.debug("!!!!!!!!!!!!!" + event + "!!!!!!!!!!!!");
             long notifiedRecvTimeTs = event.getRecvTimeTs();
 
             ContextElement contextElement = event.getContextElement();
