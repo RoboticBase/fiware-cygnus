@@ -51,8 +51,6 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
-import java.io.UnsupportedEncodingException;
-
 /**
  * Sink for Elasticsearch.
  *
@@ -458,14 +456,6 @@ public class NGSIElasticsearchSink extends NGSISink {
             aggregator.initialize(events.get(0));
 
             for (NGSIEvent event : events) {
-                LOGGER.info("[XXXXXXXX" + event.getHeaders().toString() + "XXXXXXXX]");
-                try {
-                    LOGGER.info("[XXXXXXXX" + new String(event.getBody(), "utf-8") + "XXXXXXXX]");
-                } catch (UnsupportedEncodingException e) {
-                    //
-                }
-                LOGGER.info("[XXXXXXXX" + event.getOriginalCE() + "XXXXXXXX]");
-                LOGGER.info("[XXXXXXXX" + event.getMappedCE() + "XXXXXXXX]");
                 aggregator.aggregate(event);
             } // for
 
@@ -494,6 +484,14 @@ public class NGSIElasticsearchSink extends NGSISink {
     @Override
     public void expirateRecords(long expirationTime) throws CygnusExpiratingError {
     } // expirateRecords
+
+    public String getIndexName(String prefix, String service, String servicePath) {
+        String indexName = (prefix + "-" + service + servicePath).toLowerCase().replaceAll("[/\\\\*?\"<>\\| ,#:]", "-");
+        if (indexName.matches("^[-_+].*")) {
+            indexName = "idx" + indexName;
+        } // if
+        return indexName;
+    } // getIndexName
 
     /**
      * An innner Class for aggregating aggregation.
@@ -528,7 +526,7 @@ public class NGSIElasticsearchSink extends NGSISink {
         public void initialize(NGSIEvent event) throws CygnusBadConfiguration {
             String service = event.getServiceForNaming(enableNameMappings);
             String servicePath = event.getServicePathForNaming(enableGrouping, enableNameMappings);
-            this.index = (NGSIElasticsearchSink.this.indexPrefix + "-" + service + servicePath).toLowerCase().replace("/", "-");
+            this.index = NGSIElasticsearchSink.this.getIndexName(NGSIElasticsearchSink.this.indexPrefix, service, servicePath);
             LOGGER.debug("ElasticsearchAggregator initialize (index=" + this.index + ")");
         } // initialize
 

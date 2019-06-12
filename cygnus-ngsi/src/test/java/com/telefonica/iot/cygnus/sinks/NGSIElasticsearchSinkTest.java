@@ -1192,6 +1192,64 @@ public class NGSIElasticsearchSinkTest {
         } // testPersistBatchWithThreeAttributesWithMetadataColumn
     } // PersistBatchTest
 
+    @RunWith(Parameterized.class)
+    public static class IndexNameTest {
+        /**
+         * setup test class
+         */
+        @BeforeClass
+        public static void setUpClass() {
+            LogManager.getRootLogger().setLevel(Level.FATAL);
+        } // setUpClass
+
+        @Parameters
+        public static Collection<String[]> getParameters() {
+            List<String[]> params = new ArrayList<>();
+            for (String prefix : new String[]{"prefix", "PREFIX", "-prefix", "_prefix"}) {
+                for(String service : new String[]{"service", "SERVICE", "service/\\*?\"<>| ,#:"}) {
+                    for(String servicepath : new String[]{"servicepath", "SERVICEPATH", "servicepath/\\*?\"<>| ,#:"}) {
+                        params.add(new String[]{prefix, service, servicepath});
+                    }
+                }
+            }
+            return params;
+        }
+
+        private String prefix;
+        private String service;
+        private String servicepath;
+        public IndexNameTest(String prefix, String service, String servicepath) {
+            this.prefix = prefix;
+            this.service = service;
+            this.servicepath = servicepath;
+        } // IndexNameTest
+
+        @Test
+        public void testIndexNameWithReplacedChar() {
+            System.out.println(getTestTraceHead("[NGSIElasticsearchSinkTest.testIndexNameWithReplacedChar] - prefix=" + prefix + ", service=" + service + ", servicepath=" + servicepath));
+            NGSIElasticsearchSink sink = new NGSIElasticsearchSink();
+
+            String idx = "";
+            if (prefix == "prefix" || prefix == "PREFIX") {
+                idx += "prefix";
+            } else {
+                idx += "idx" + prefix;
+            }
+            if (service == "service" || service == "SERVICE") {
+                idx += "-" + "service";
+            } else {
+                idx += "-" + "service------------";
+            }
+            if (servicepath == "servicepath" || servicepath == "SERVICEPATH") {
+                idx += "servicepath";
+            } else {
+                idx += "servicepath------------";
+            }
+
+            assertEquals(idx, sink.getIndexName(prefix, service, servicepath));
+        } // testIndexNameWithReplacedChar
+    } // IndexNameTest
+
     @Ignore
     private static class Fixture {
         public Data<String, String> elasticsearchHost;
