@@ -4,6 +4,15 @@ Content:
 * [Functionality](#section1)
     * [Mapping NGSI events to `NGSIEvent` objects](#section1.1)
     * [Mapping `NGSIEvent`s to Elasticsearch data structures](#section1.2)
+        * [Elasticsearch index naming conventions](#section1.2.1)
+        * [Converting the type of `attrValue` according to `attrType`](#section1.2.2)
+        * [Row-like storing](#section1.2.3)
+        * [Column-like storing](#section1.2.4)
+    * [Example](#section1.3)
+        * [`NGSIEvent`](#section1.3.1)
+        * [Index names](#section1.3.2)
+        * [Row-like storing](#section1.3.3)
+        * [Column-like storing](#section1.3.4)
 * [Administration guide](#section2)
 * [Programmers guide](#section3)
 
@@ -39,10 +48,10 @@ The Elasticsearch index is limited to 255 bytes.
 
 [Top](#top)
 
-#### <a name="section1.2.2"></a>Casting the value according to `type`
-If `cast_value` parameter is set to `true`, the `attrValue` of `NGSIEvent` is cast according to the `attrType` when storing index.
+#### <a name="section1.2.2"></a>Converting the type of `attrValue` according to `attrType`
+If `cast_value` parameter is set to `true`, the type of `attrValue` will be converted automatically according to the `attrType` when storing index. The converting rule is like below:
 
-|`attrType` (ignore case)|cast type|
+|`attrType` (ignore case)|the type to be converted|
 |:--|:--|
 |`int` or `integer`|Integer|
 |`float`|Float|
@@ -64,4 +73,57 @@ Regarding the specific data stored within the above index, if `attr_persistence`
 * `attrMetadata`: Notified attribute metadata.
 
 **Caution**
-The type of `attrValue` handled by Elasticsearch is determined by the first registered record. Therefore, when you set the `attr_persistence` parameter as `row` and `cast_value` parameter as `true`, 
+The type of `attrValue` handled by Elasticsearch is determined by the first registered record. Therefore, when you set the `attr_persistence` parameter as `row` and `cast_value` parameter as `true`, the later attribute records which have different type with the first attribute record will be ignored and will not be stored to Elasticsearch.
+
+[Top](#top)
+
+#### <a name="section1.2.4"></a>Column-like storing
+Regarding the specific data stored within the above collections, if `attr_persistence` parameter is set to `column` then a single Json document is composed for the whole notified entity. Each document contains a variable number of fields:
+
+* `recvTime`: timestamp in human-readable format ([ISO 8601](http://en.wikipedia.org/wiki/ISO_8601)). You can set the timezone of recvTime by using the `timezone` parameter.
+* `entityId`: Notified entity identifier.
+* `entityType`: Notified entity type.
+*  For each notified attribute, a field named as the attribute is considered. This field will store the attribute values along the time.
+
+**Caution**
+When `attr_persistence` parameter is set to `column`, the metadata of each attribute will be ignored.
+
+### <a name="section1.3"></a>Example
+#### <a name="section1.3.1"></a>`NGSIEvent`
+Assuming the following `NGSIEvent` is created from a notified NGSI context data (the code below is an <i>object representation</i>, not any real data format):
+
+    ngsi-event={
+        headers={
+	         content-type=application/json,
+	         timestamp=1429535775,
+	         transactionId=1429535775-308-0000000000,
+	         correlationId=1429535775-308-0000000000,
+	         fiware-service=vehicles,
+	         fiware-servicepath=/4wheels,
+	         <grouping_rules_interceptor_headers>,
+	         <name_mappings_interceptor_headers>
+        },
+        body={
+	        entityId=car1,
+	        entityType=car,
+	        attributes=[
+	            {
+	                attrName=speed,
+	                attrType=float,
+	                attrValue=112.9
+	            },
+	            {
+	                attrName=oil_level,
+	                attrType=float,
+	                attrValue=74.6
+	            }
+	        ]
+	    }
+    }
+
+[Top](#top)
+
+#### <a name="section1.3.2"></a>Index names
+
+
+
