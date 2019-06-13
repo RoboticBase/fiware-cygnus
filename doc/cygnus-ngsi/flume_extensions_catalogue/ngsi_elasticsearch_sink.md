@@ -116,6 +116,16 @@ Assuming the following `NGSIEvent` is created from a notified NGSI context data 
 	                attrName=oil_level,
 	                attrType=float,
 	                attrValue=74.6
+	            },
+	            {
+	                attrName=driver,
+	                attrType=string,
+	                attrValue=Jhon
+	            },
+	            {
+	                attrName=headlight,
+	                attrType=boolean,
+	                attrValue=true
 	            }
 	        ]
 	    }
@@ -124,6 +134,199 @@ Assuming the following `NGSIEvent` is created from a notified NGSI context data 
 [Top](#top)
 
 #### <a name="section1.3.2"></a>Index names
+A Elasticsearch index is named as the concatenation of prefix , "-", the notified FIWARE servcie, FIWARE service path and created date (yyyy.mm.dd). The default value of prefix is `cygnus`, but you can change it by using the `index_prefix` parameter.
+The concatinated string will be lower cased, and some forbidden characters(`\, /, *, ?, ", <, >, |, ` ` (space character), ,, #, :`) will be replaced by '-'. And then, 'idx' will be appended at the beggning when prefix starts with `-, _, +`.
 
+|`date`|`prefix`|`FIWARE service`|`FIWARE service path`|`index name`|
+|:--|:--|:--|:--|:--|
+|June 13, 2019|`_#PREFIX*1`|`vehicles`|`/4wheels`|`idx_-prefix-1-vehicles-4wheels-2019.06.13`|
 
+[Top](#top)
 
+#### <a name="section1.3.3"></a>Row-like storing
+Assuming `attr_persistence=row` and `cast_value=false` as configuration parameters, then `NGSIElasticsearchSink` will persist the 4 records within its index as:
+
+    {
+      "_index": "idx_-prefix-1-vehicles-4wheels-2019.06.13",
+      "_type": "cygnus_type",
+      "_id": "1560410492045-4B16059D92EF1CF00BC343462A5809FE",
+      "_version": 1,
+      "_score": null,
+      "_source": {
+        "recvTime": "2019-06-13T16:21:32.045+0900",
+        "entityType": "car",
+        "attrMetadata": [],
+        "entityId": "car1",
+        "attrValue": "Jhon",
+        "attrName": "driver",
+        "attrType": "string"
+      },
+      "fields": {
+        "recvTime": [
+          "2019-06-13T07:21:32.045Z"
+        ]
+      },
+      "sort": [
+        1560410492045
+      ]
+    }
+
+    {
+      "_index": "idx_-prefix-1-vehicles-4wheels-2019.06.13",
+      "_type": "cygnus_type",
+      "_id": "1560410492045-CDCE5B76B4E507455E43748C66A6544E",
+      "_version": 1,
+      "_score": null,
+      "_source": {
+        "recvTime": "2019-06-13T16:21:32.045+0900",
+        "entityType": "car",
+        "attrMetadata": [],
+        "entityId": "car1",
+        "attrValue": "true",
+        "attrName": "headlight",
+        "attrType": "boolean"
+      },
+      "fields": {
+        "recvTime": [
+          "2019-06-13T07:21:32.045Z"
+        ]
+      },
+      "sort": [
+        1560410492045
+      ]
+    }
+
+    {
+      "_index": "idx_-prefix-1-vehicles-4wheels-2019.06.13",
+      "_type": "cygnus_type",
+      "_id": "1560410492045-1542A836CA541586B42516D054EBD187",
+      "_version": 1,
+      "_score": null,
+      "_source": {
+        "recvTime": "2019-06-13T16:21:32.045+0900",
+        "entityType": "car",
+        "attrMetadata": [],
+        "entityId": "car1",
+        "attrValue": "74.6",
+        "attrName": "oil_level",
+        "attrType": "float"
+      },
+      "fields": {
+        "recvTime": [
+          "2019-06-13T07:21:32.045Z"
+        ]
+      },
+      "sort": [
+        1560410492045
+      ]
+    }
+
+    {
+      "_index": "idx_-prefix-1-vehicles-4wheels-2019.06.13",
+      "_type": "cygnus_type",
+      "_id": "1560410492045-D6CDC64848D72A71AE385CCD16D71CEA",
+      "_version": 1,
+      "_score": null,
+      "_source": {
+        "recvTime": "2019-06-13T16:21:32.045+0900",
+        "entityType": "car",
+        "attrMetadata": [],
+        "entityId": "car1",
+        "attrValue": "112.9",
+        "attrName": "speed",
+        "attrType": "float"
+      },
+      "fields": {
+        "recvTime": [
+          "2019-06-13T07:21:32.045Z"
+        ]
+      },
+      "sort": [
+        1560410492045
+      ]
+    }
+
+[Top](#top)
+
+#### <a name="section1.3.4"></a>Column-like storing
+Assuming `attr_persistence=column` and `cast_value=true` as configuration parameters, then `NGSIElasticsearchSink` will persist a record within its index as:
+
+    {
+      "_index": "idx_-prefix-1-vehicles-4wheels-2019.06.13",
+      "_type": "cygnus_type",
+      "_id": "1560406984429-A9F56B9055EC751FD7E5941C43C90F29",
+      "_version": 1,
+      "_score": null,
+      "_source": {
+        "oil_level": 74.6,
+        "recvTime": "2019-06-13T15:23:04.429+0900",
+        "driver": "Jhon",
+        "entityType": "car",
+        "entityId": "car1",
+        "speed": 112.9,
+        "headlight": true
+      },
+      "fields": {
+        "recvTime": [
+          "2019-06-13T06:23:04.429Z"
+        ]
+      },
+      "sort": [
+        1560406984429
+      ]
+    }
+
+Because `cast_value` parameter is set as true, Elasticsearch handles the `speed` and `oil_level` as **number**, `driver` as **string**, and `headlight` as **boolean**.
+
+[Top](#top)
+
+## <a name="section2"></a>Administration guide
+### <a name="section2.1"></a>Configuration
+`NGSIElasticsearchSink` is configured through the following parameters:
+
+| Parameter | Mandatory | Default value | Comments |
+|---|---|---|---|
+| type | yes | N/A | com.telefonica.iot.cygnus.sinks.NGSIElasticsearchSink |
+| channel | yes | N/A | elasticsearch-channel |
+| elasticsearch\_host | yes | localhost | the hostname of Elasticsearch server |
+| elasticsearch\_port | yes | 9200 | the port number of Elasticsearch server (0 - 65535) |
+| ssl | yes | false | true if connect to Elasticsearch server using SSL ("true" or "false") |
+| index\_prefix | no | cygnus | the prefix of index name |
+| mapping\_type | no | cygnus\_type | the mapping type name of Elasticsearch |
+| ignore\_white\_spaces | no | true | true if exclusively white space-based attribute values must be ignored, false otherwise ("true" or "false") |
+| attr\_persistence | no | row | the persistence style as row-style or column-style ("row" or "column") |
+| timezone | no | UTC | timezone to be used as a document's timestamp |
+| cast\_value | no | false | true if cast the attrValue using attrType ("true" or "false") |
+| cache\_flash\_interval\_sec | no | 0 | 0 if notified data will be persisted to Elasticsearch immediately. positive integer if notified data are cached on NGSIElasticsearchSink's memory and will be persisted to Elasticsearch periodically every `cache_flash_interval_sec` |
+| backend.max\_conns | no | 500 | Maximum number of connections allowed for a Http-based HDFS backend |
+| backend.max\_conns\_per\_route | no | 100 | Maximum number of connections per route allowed for a Http-based HDFS backend |
+
+A configuration example could be:
+
+    cygnus-ngsi.sinks = elasticsearch-sink
+    cygnus-ngsi.channels = elasticsearch-channel
+    ...
+    cygnus-ngsi.sinks.elasticsearch-sink.type = com.telefonica.iot.cygnus.sinks.NGSIElasticsearchSink
+    cygnus-ngsi.sinks.elasticsearch-sink.channel = elasticsearch-channel
+    cygnus-ngsi.sinks.elasticsearch-sink.elasticsearch_host = elasticsearch.local
+    cygnus-ngsi.sinks.elasticsearch-sink.elasticsearch_port = 9200
+    cygnus-ngsi.sinks.elasticsearch-sink.ssl = false
+    cygnus-ngsi.sinks.elasticsearch-sink.index_prefix = cygnus
+    cygnus-ngsi.sinks.elasticsearch-sink.mapping_type = cygnus_type
+    cygnus-ngsi.sinks.elasticsearch-sink.ignore_white_spaces = true
+    cygnus-ngsi.sinks.elasticsearch-sink.attr_persistence = row
+    cygnus-ngsi.sinks.elasticsearch-sink.timezone = UTC
+    cygnus-ngsi.sinks.elasticsearch-sink.cast_value = false
+    cygnus-ngsi.sinks.elasticsearch-sink.cache_flash_interval_sec = 0
+    cygnus-ngsi.sinks.elasticsearch-sink.backend.max_conns = 500
+    cygnus-ngsi.sinks.elasticsearch-sink.backend.max_conns_per_route = 100
+
+[Top](#top)
+
+### <a neme="section2.2"></a>Use cases
+Use `NGSIElasticsearchSink` if you are looking for a Json-based full-text search engine.
+
+[Top](#top)
+
+### <a name="section2.3"></a>Important notes
+#### <a name="section2.3.1"></a>About batching
