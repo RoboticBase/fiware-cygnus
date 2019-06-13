@@ -37,6 +37,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import javax.xml.bind.DatatypeConverter;
+
 import org.apache.flume.Context;
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
@@ -698,7 +703,7 @@ public class NGSIElasticsearchSinkTest {
             sink.persistBatch(batch);
             verify(mockBackend, times(1)).bulkInsert(idxCaptor.capture(), mappingTypeCaptor.capture(), dataCaptor.capture());
 
-            assertEquals("cygnus-room_service-room_service_path-1970.01.15", idxCaptor.getValue());
+            assertEquals("cygnus-room_service-room_service_path-room1-room-1970.01.15", idxCaptor.getValue());
             assertEquals("cygnus_type", mappingTypeCaptor.getValue());
 
             List<Map<String, String>> requestedData = dataCaptor.getValue();
@@ -751,7 +756,10 @@ public class NGSIElasticsearchSinkTest {
             sink.persistBatch(batch);
             verify(mockBackend, times(1)).bulkInsert(idxCaptor.capture(), mappingTypeCaptor.capture(), dataCaptor.capture());
 
-            assertEquals("cygnus-room_service-room_service_path-1970.01.15", idxCaptor.getValue());
+            byte[] bytes = MessageDigest.getInstance("md5").digest("temperature:".getBytes(StandardCharsets.UTF_8));
+            String hash = DatatypeConverter.printHexBinary(bytes).toLowerCase();
+
+            assertEquals("cygnus-room_service-room_service_path-room1-room-" + hash + "-1970.01.15", idxCaptor.getValue());
             assertEquals("cygnus_type", mappingTypeCaptor.getValue());
 
             List<Map<String, String>> requestedData = dataCaptor.getValue();
@@ -804,7 +812,7 @@ public class NGSIElasticsearchSinkTest {
             sink.persistBatch(batch);
             verify(mockBackend, times(1)).bulkInsert(idxCaptor.capture(), mappingTypeCaptor.capture(), dataCaptor.capture());
 
-            assertEquals("cygnus-room_service-room_service_path-1970.01.15", idxCaptor.getValue());
+            assertEquals("cygnus-room_service-room_service_path-room1-room-1970.01.15", idxCaptor.getValue());
             assertEquals("cygnus_type", mappingTypeCaptor.getValue());
 
             List<Map<String, String>> requestedData = dataCaptor.getValue();
@@ -858,7 +866,7 @@ public class NGSIElasticsearchSinkTest {
             sink.persistBatch(batch);
             verify(mockBackend, times(1)).bulkInsert(idxCaptor.capture(), mappingTypeCaptor.capture(), dataCaptor.capture());
 
-            assertEquals("cygnus-room_service-room_service_path-1970.01.15", idxCaptor.getValue());
+            assertEquals("cygnus-room_service-room_service_path-room1-room-1970.01.15", idxCaptor.getValue());
             assertEquals("cygnus_type", mappingTypeCaptor.getValue());
 
             List<Map<String, String>> requestedData = dataCaptor.getValue();
@@ -930,7 +938,10 @@ public class NGSIElasticsearchSinkTest {
             sink.persistBatch(batch);
             verify(mockBackend, times(1)).bulkInsert(idxCaptor.capture(), mappingTypeCaptor.capture(), dataCaptor.capture());
 
-            assertEquals("cygnus-room_service-room_service_path-1970.01.15", idxCaptor.getValue());
+            byte[] bytes = MessageDigest.getInstance("md5").digest("temperature:".getBytes(StandardCharsets.UTF_8));
+            String hash = DatatypeConverter.printHexBinary(bytes).toLowerCase();
+
+            assertEquals("cygnus-room_service-room_service_path-room1-room-" + hash + "-1970.01.15", idxCaptor.getValue());
             assertEquals("cygnus_type", mappingTypeCaptor.getValue());
 
             List<Map<String, String>> requestedData = dataCaptor.getValue();
@@ -983,7 +994,10 @@ public class NGSIElasticsearchSinkTest {
             sink.persistBatch(batch);
             verify(mockBackend, times(1)).bulkInsert(idxCaptor.capture(), mappingTypeCaptor.capture(), dataCaptor.capture());
 
-            assertEquals("cygnus-room_service-room_service_path-1970.01.15", idxCaptor.getValue());
+            byte[] bytes = MessageDigest.getInstance("md5").digest("roomtype:temperature:".getBytes(StandardCharsets.UTF_8));
+            String hash = DatatypeConverter.printHexBinary(bytes).toLowerCase();
+
+            assertEquals("cygnus-room_service-room_service_path-room1-room-" + hash + "-1970.01.15", idxCaptor.getValue());
             assertEquals("cygnus_type", mappingTypeCaptor.getValue());
 
             List<Map<String, String>> requestedData = dataCaptor.getValue();
@@ -1038,9 +1052,9 @@ public class NGSIElasticsearchSinkTest {
             verify(mockBackend, times(1)).bulkInsert(idxCaptor.capture(), mappingTypeCaptor.capture(), dataCaptor.capture());
 
             if (timezone == "Asia/Tokyo") {
-                assertEquals("cygnus-room_service-room_service_path-2018.01.02", idxCaptor.getValue());
+                assertEquals("cygnus-room_service-room_service_path-room1-room-2018.01.02", idxCaptor.getValue());
             } else {
-                assertEquals("cygnus-room_service-room_service_path-2018.01.01", idxCaptor.getValue());
+                assertEquals("cygnus-room_service-room_service_path-room1-room-2018.01.01", idxCaptor.getValue());
             }
             assertEquals("cygnus_type", mappingTypeCaptor.getValue());
 
@@ -1147,10 +1161,13 @@ public class NGSIElasticsearchSinkTest {
             sink.persistBatch(batch);
             verify(mockBackend, times(1)).bulkInsert(idxCaptor.capture(), mappingTypeCaptor.capture(), dataCaptor.capture());
 
+            byte[] bytes = MessageDigest.getInstance("md5").digest("roomtype:smoking:temperature:".getBytes(StandardCharsets.UTF_8));
+            String hash = DatatypeConverter.printHexBinary(bytes).toLowerCase();
+
             if (timezone == "Asia/Tokyo") {
-                assertEquals("cygnus-room_service-room_service_path-2018.01.02", idxCaptor.getValue());
+                assertEquals("cygnus-room_service-room_service_path-room1-room-" + hash + "-2018.01.02", idxCaptor.getValue());
             } else {
-                assertEquals("cygnus-room_service-room_service_path-2018.01.01", idxCaptor.getValue());
+                assertEquals("cygnus-room_service-room_service_path-room1-room-" + hash + "-2018.01.01", idxCaptor.getValue());
             }
             assertEquals("cygnus_type", mappingTypeCaptor.getValue());
 
@@ -1208,7 +1225,11 @@ public class NGSIElasticsearchSinkTest {
             for (String prefix : new String[]{"prefix", "PREFIX", "-prefix", "_prefix"}) {
                 for(String service : new String[]{"service", "SERVICE", "service/\\*?\"<>| ,#:"}) {
                     for(String servicepath : new String[]{"servicepath", "SERVICEPATH", "servicepath/\\*?\"<>| ,#:"}) {
-                        params.add(new String[]{prefix, service, servicepath});
+                        for (String entityid : new String[]{"entityid", "ENTITYID", "entityid/\\*?\"<>| ,#:"}) {
+                            for (String entitytype: new String[]{"entitytype", "ENTITYTYPE", "entitytype/\\*?\"<>| ,#:"}) {
+                                params.add(new String[]{prefix, service, servicepath, entityid, entitytype});
+                            }
+                        }
                     }
                 }
             }
@@ -1218,35 +1239,52 @@ public class NGSIElasticsearchSinkTest {
         private String prefix;
         private String service;
         private String servicepath;
-        public IndexNameTest(String prefix, String service, String servicepath) {
+        private String entityid;
+        private String entitytype;
+        public IndexNameTest(String prefix, String service, String servicepath, String entityid, String entitytype) {
             this.prefix = prefix;
             this.service = service;
             this.servicepath = servicepath;
+            this.entityid = entityid;
+            this.entitytype = entitytype;
         } // IndexNameTest
 
         @Test
         public void testIndexNameWithReplacedChar() {
-            System.out.println(getTestTraceHead("[NGSIElasticsearchSinkTest.testIndexNameWithReplacedChar] - prefix=" + prefix + ", service=" + service + ", servicepath=" + servicepath));
+            System.out.println(getTestTraceHead("[NGSIElasticsearchSinkTest.testIndexNameWithReplacedChar] - prefix=" + prefix + ", service=" + service + ", servicepath=" + servicepath + ", entityid=" + entityid + ", entitytype=" + entitytype));
             NGSIElasticsearchSink sink = new NGSIElasticsearchSink();
 
-            String idx = "";
+            StringBuilder idx = new StringBuilder();
             if (prefix == "prefix" || prefix == "PREFIX") {
-                idx += "prefix";
+                idx.append("prefix");
             } else {
-                idx += "idx" + prefix;
+                idx.append("idx").append(prefix);
             }
+            idx.append("-");
             if (service == "service" || service == "SERVICE") {
-                idx += "-" + "service";
+                idx.append("service");
             } else {
-                idx += "-" + "service------------";
+                idx.append("service------------");
             }
             if (servicepath == "servicepath" || servicepath == "SERVICEPATH") {
-                idx += "servicepath";
+                idx.append("servicepath");
             } else {
-                idx += "servicepath------------";
+                idx.append("servicepath------------");
+            }
+            idx.append("-");
+            if (entityid == "entityid" || entityid == "ENTITYID") {
+                idx.append("entityid");
+            } else {
+                idx.append("entityid------------");
+            }
+            idx.append("-");
+            if (entitytype == "entitytype" || entitytype == "ENTITYTYPE") {
+                idx.append("entitytype");
+            } else {
+                idx.append("entitytype------------");
             }
 
-            assertEquals(idx, sink.getIndexName(prefix, service, servicepath));
+            assertEquals(idx.toString(), sink.getIndexName(prefix, service, servicepath, entityid, entitytype));
         } // testIndexNameWithReplacedChar
     } // IndexNameTest
 
