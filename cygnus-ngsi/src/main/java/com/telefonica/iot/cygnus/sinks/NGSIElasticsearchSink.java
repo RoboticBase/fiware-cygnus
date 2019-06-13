@@ -524,6 +524,11 @@ public class NGSIElasticsearchSink extends NGSISink {
          * @throws com.telefonica.iot.cygnus.errors.CygnusBadConfiguration
          */
         public void initialize(NGSIEvent event) throws CygnusBadConfiguration {
+            LOGGER.info("XXXXXXXX " + event.getOriginalCE() + " XXXXXXXX");
+            LOGGER.info("YYYYYYYY " + event.getMappedCE() + " YYYYYYYY");
+            for (Map.Entry<String, String> entry : event.getHeaders().entrySet()) {
+                LOGGER.info("ZZZZZZZZ " + entry.getKey() + " : " + entry.getValue() + " ZZZZZZZZ");
+            }
             String service = event.getServiceForNaming(enableNameMappings);
             String servicePath = event.getServicePathForNaming(enableGrouping, enableNameMappings);
             this.index = NGSIElasticsearchSink.this.getIndexName(NGSIElasticsearchSink.this.indexPrefix, service, servicePath);
