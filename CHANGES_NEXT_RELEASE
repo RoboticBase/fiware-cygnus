@@ -1,1 +1,2 @@
 [cygnus-ngsi][PostGIS] Fix geo location persistence bug in column mode
+[cygnus-ngsi][ElasticSearch] Add ElasticSearch sink (#1516, #1521)

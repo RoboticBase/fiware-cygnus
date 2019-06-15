@@ -14,7 +14,16 @@ Content:
         * [Row-like storing](#section1.3.3)
         * [Column-like storing](#section1.3.4)
 * [Administration guide](#section2)
+    * [Configuration](#section2.1)
+    * [Use cases](#section2.2)
+    * [Important notes](#section2.3)
+        * [About caching](#section2.3.1)
+        * [About `recvTime` and `TimeInstant` metadata](#section2.3.2)
+        * [About supported versions of Elasticsearch](#section2.3.3)
 * [Programmers guide](#section3)
+    * [`NGSIElasticsearchSink` class](#section3.1)
+    * [`ElasticsearchBackend` class](#section3.2)
+    * [Authentication and authorization](#section3.3)
 
 ## <a name="section1"></a>Functionality
 `com.telefonica.iot.cygnus.sinks.NGSIElasticsearchSink`, or simply `NGSIElasticsearchSink` is a sink designed to persist NGSI context data events into an Elasticsearch. Usually, such a NGSI context data is notified from a [Orion Context Broker](https://github.com/telefonicaid/fiware-orion), but any other sources can be accepted as long as they are NGSI.
@@ -28,7 +37,7 @@ Next sections will explain this is detail.
 ### <a name="section1.1"></a>Mapping NGSI events to `NGSIEvent` objects
 Notified NGSI events (containing context data) are transformed into `NGSIEvent` objects (for each context element a `NGSIEvent` is created; such an event is a mix of certain headers and a `ContextElement` object), independently of the NGSI data generator or the final backend where it is persisted.
 
-This is done at the cygnus-ngsi Http listeners (in Flume jergon, sources) thanks to [`NGSIRestHandler`](/ngsi_rest_handler.md). Once translated, the data (now, as `NGSIEvent` objects) is put into the internal channels for future consumption (see next section).
+This is done at the cygnus-ngsi Http listeners (in Flume jergon, sources) thanks to [`NGSIRestHandler`](./ngsi_rest_handler.md). Once translated, the data (now, as `NGSIEvent` objects) is put into the internal channels for future consumption (see next section).
 
 [Top](#top)
 
@@ -36,15 +45,25 @@ This is done at the cygnus-ngsi Http listeners (in Flume jergon, sources) thanks
 Elasticsearch organizes the data in database that contain collections of Json documents. Such organization is exploited by `NGSIElasticsearchSink` each time a `NGSIEvent` is going to be persisted.
 
 #### <a name="section1.2.1"></a>Elasticsearch index naming conventions
-An index of Elasticsearch called as the `fiware-service` header value within the event is created (if not existing yet). A configured prefix is added (by default, `cygnus`).
+An index of Elasticsearch is automatically created (if not existing yet).
 
-The Elasticsearch index name has some limitations such as [the index name is lowercase only , it cannot include `\, /, *, ?, ", <, >, |, ` ` (space character), ,, #, :` and it cannot start with `-, _, +`](https://www.elastic.co/guide/en/elasticsearch/reference/6.4/indices-create-index.html). So NGSIElasticsearchSink constructs the index name according to the following steps:
-1. join prefix, "-", fiware service  and fiware servicepath.
-2. convert to lower cases.
-3. replace forbidden charactters to '-'.
-4. append 'idx' at the beggning of index name when it starts with `-, _, +`.
+An Elasticsearch index must have [a single mapping type](https://www.elastic.co/guide/en/elasticsearch/reference/current/removal-of-types.html). And the index name has [some limitations](https://www.elastic.co/guide/en/elasticsearch/reference/6.4/indices-create-index.html) like below:
+* index name is lowercase only.
+* index name cannot include `\, /, *, ?, ", <, >, |, ` ` (space character), ,, #, :`.
+* index name cannot start with `-, _, +`.
+* index name is limited to 255 bytes.
 
-The Elasticsearch index is limited to 255 bytes.
+So `NGSIElasticsearchSink` constructs the index name according to the following steps:
+
+1. create a base string by joining configured &lt;prefix&gt;, &lt;fiware service&gt;, &lt;fiware servicepath&gt;, &lt;entity Id&gt; and &lt;entity tyep&gt;.
+2. convert the base string to lower cases.
+3. replace forbidden characters to '-'.
+4. when you use `Column-like storing`, append a hash string calculated by the attribute names to be stored
+    * MD5 hash is calculated by concatinated attribute names such as  `attrName1:attrName2:...`.
+5. when it starts with `-, _, +`, append 'idx' at the beggning of the base string.
+6. append the created &lt;date&gt; such as `yyyy.mm.dd`.
+
+According to the above rules, `NGSIElasticsearchSink` can handle the multiple subscriptions with different attributes of the same entity.
 
 [Top](#top)
 
@@ -69,214 +88,357 @@ Regarding the specific data stored within the above index, if `attr_persistence`
 * `entityType`: Notified entity type.
 * `attrName`: Notified attribute name.
 * `attrType`: Notified attribute type.
-* `attrValue`: Notified atribute value. If `cast_value` parameter is set to `true`, this value is automatically cast. Otherwise the value is treated as String.
+* `attrValue`: Notified atribute value.
+    * If `cast_value` parameter is set to `true`, the type of this value is automatically converted according to `attrType`.
+    * Otherwise the value is handled as String.
 * `attrMetadata`: Notified attribute metadata.
 
-**Caution**
-The type of `attrValue` handled by Elasticsearch is determined by the first registered record. Therefore, when you set the `attr_persistence` parameter as `row` and `cast_value` parameter as `true`, the later attribute records which have different type with the first attribute record will be ignored and will not be stored to Elasticsearch.
+**CAUTION**  
+Because Elasticsearch 6.0 or later must have a single mapping type, the type of `attrValue` handled by Elasticsearch is determined by the first registered record. Therefore, when you set the `attr_persistence` parameter as `row` and `cast_value` parameter as `true`, the later attribute records which have different type with the first attribute record will be ignored and will not be stored to Elasticsearch.
+
+**Please make sure that the all attributes to be stored have the same `AttrType` when you want to set the `attr_persistent` parameter as `row` and the `cast_value` parameter as `true`.**
 
 [Top](#top)
 
 #### <a name="section1.2.4"></a>Column-like storing
-Regarding the specific data stored within the above collections, if `attr_persistence` parameter is set to `column` then a single Json document is composed for the whole notified entity. Each document contains a variable number of fields:
+Regarding the specific data stored within the above index, if `attr_persistence` parameter is set to `column` then a single Json document is composed for the whole notified entity. Each document contains a variable number of fields:
 
 * `recvTime`: timestamp in human-readable format ([ISO 8601](http://en.wikipedia.org/wiki/ISO_8601)). You can set the timezone of recvTime by using the `timezone` parameter.
 * `entityId`: Notified entity identifier.
 * `entityType`: Notified entity type.
 *  For each notified attribute, a field named as the attribute is considered. This field will store the attribute values along the time.
+    * If `cast_value` parameter is set to `true`, the type of this value is automatically converted according to `attrType`.
+    * Otherwise the value is handled as String.
 
-**Caution**
-When `attr_persistence` parameter is set to `column`, the metadata of each attribute will be ignored.
+**CAUTION**  
+When `attr_persistence` parameter is set to `column`, **the metadata of each attribute is ignored and is not stored.**
 
 ### <a name="section1.3"></a>Example
 #### <a name="section1.3.1"></a>`NGSIEvent`
 Assuming the following `NGSIEvent` is created from a notified NGSI context data (the code below is an <i>object representation</i>, not any real data format):
 
-    ngsi-event={
-        headers={
-	         content-type=application/json,
-	         timestamp=1429535775,
-	         transactionId=1429535775-308-0000000000,
-	         correlationId=1429535775-308-0000000000,
-	         fiware-service=vehicles,
-	         fiware-servicepath=/4wheels,
-	         <grouping_rules_interceptor_headers>,
-	         <name_mappings_interceptor_headers>
-        },
-        body={
-	        entityId=car1,
-	        entityType=car,
-	        attributes=[
-	            {
-	                attrName=speed,
-	                attrType=float,
-	                attrValue=112.9
-	            },
-	            {
-	                attrName=oil_level,
-	                attrType=float,
-	                attrValue=74.6
-	            },
-	            {
-	                attrName=driver,
-	                attrType=string,
-	                attrValue=Jhon
-	            },
-	            {
-	                attrName=headlight,
-	                attrType=boolean,
-	                attrValue=true
-	            }
-	        ]
-	    }
-    }
+```
+ngsi-event={
+    headers={
+       content-type=application/json,
+       timestamp=1429535775,
+       transactionId=1429535775-308-0000000000,
+       correlationId=1429535775-308-0000000000,
+       fiware-service=vehicles,
+       fiware-servicepath=/4wheels,
+       <grouping_rules_interceptor_headers>,
+       <name_mappings_interceptor_headers>
+    },
+    body={
+      entityId=car1,
+      entityType=car,
+      attributes=[
+          {
+              attrName=speed,
+              attrType=float,
+              attrValue=112.9
+          },
+          {
+              attrName=oil_level,
+              attrType=float,
+              attrValue=74.6
+          },
+          {
+              attrName=driver,
+              attrType=string,
+              attrValue=Jhon
+          },
+          {
+              attrName=headlight,
+              attrType=boolean,
+              attrValue=true
+          }
+      ]
+  }
+}
+```
 
 [Top](#top)
 
 #### <a name="section1.3.2"></a>Index names
-A Elasticsearch index is named as the concatenation of prefix , "-", the notified FIWARE servcie, FIWARE service path and created date (yyyy.mm.dd). The default value of prefix is `cygnus`, but you can change it by using the `index_prefix` parameter.
-The concatinated string will be lower cased, and some forbidden characters(`\, /, *, ?, ", <, >, |, ` ` (space character), ,, #, :`) will be replaced by '-'. And then, 'idx' will be appended at the beggning when prefix starts with `-, _, +`.
+The index policy of Elasticsearch is a bit complicated (see the [Elasticsearch index naming conventions](#section1.2.1) section). Please see the below examples to help your understanding.
 
-|`date`|`prefix`|`FIWARE service`|`FIWARE service path`|`index name`|
-|:--|:--|:--|:--|:--|
-|June 13, 2019|`_#PREFIX*1`|`vehicles`|`/4wheels`|`idx_-prefix-1-vehicles-4wheels-2019.06.13`|
+* Row-like sotring
+
+|`date`|`attr_persistence`|`prefix`(default `cygnus`)|`index name`|
+|:--|:--|:--|:--|
+|June 15, 2019|row|N/A|`cygnus-vehicles-4wheels-car1-car-2019.06.15`|
+|June 15, 2019|row|\_#PREFIX\*1|`idx_-prefix-1-vehicles-4wheels-car1-car-2019.06.15`|
+
+* Column-like storing
+
+|`date`|`attr_persistence`|`prefix`(default `cygnus`)|`index name`|
+|:--|:--|:--|:--|
+|June 15, 2019|column|N/A|`cygnus-vehicles-4wheels-car1-car-30ecbfb71797b22d45b1458d33e2a995-2019.06.15`|
+|June 15, 2019|column|\_#PREFIX\*1|`idx_-prefix-1-vehicles-4wheels-car1-car-30ecbfb71797b22d45b1458d33e2a995-2019.06.15`|
+
+> `30ecbfb71797b22d45b1458d33e2a995` is the MD5 hash of `driver:headlight:oil_level:speed:`
 
 [Top](#top)
 
 #### <a name="section1.3.3"></a>Row-like storing
 Assuming `attr_persistence=row` and `cast_value=false` as configuration parameters, then `NGSIElasticsearchSink` will persist the 4 records within its index as:
 
-    {
-      "_index": "idx_-prefix-1-vehicles-4wheels-2019.06.13",
-      "_type": "cygnus_type",
-      "_id": "1560410492045-4B16059D92EF1CF00BC343462A5809FE",
-      "_version": 1,
-      "_score": null,
-      "_source": {
-        "recvTime": "2019-06-13T16:21:32.045+0900",
-        "entityType": "car",
-        "attrMetadata": [],
-        "entityId": "car1",
-        "attrValue": "Jhon",
-        "attrName": "driver",
-        "attrType": "string"
-      },
-      "fields": {
-        "recvTime": [
-          "2019-06-13T07:21:32.045Z"
-        ]
-      },
-      "sort": [
-        1560410492045
-      ]
-    }
+```json
+{
+  "_index": "cygnus-vehicles-4wheels-car1-car-2019.06.15",
+  "_type": "cygnus_type",
+  "_id": "1560553413553-A75F02A46692678F14273BB4F7E5D11D",
+  "_version": 1,
+  "_score": null,
+  "_source": {
+    "recvTime": "2019-06-15T08:03:33.553+0900",
+    "entityType": "car",
+    "attrMetadata": [],
+    "entityId": "car1",
+    "attrValue": "Jhon",
+    "attrName": "driver",
+    "attrType": "string"
+  },
+  "fields": {
+    "recvTime": [
+      "2019-06-14T23:03:33.553Z"
+    ]
+  },
+  "sort": [
+    1560553413553
+  ]
+}
+```
+```json
+{
+  "_index": "cygnus-vehicles-4wheels-car1-car-2019.06.15",
+  "_type": "cygnus_type",
+  "_id": "1560553413553-B677CB462D993FE6184BAD73E7DAC2AE",
+  "_version": 1,
+  "_score": null,
+  "_source": {
+    "recvTime": "2019-06-15T08:03:33.553+0900",
+    "entityType": "car",
+    "attrMetadata": [],
+    "entityId": "car1",
+    "attrValue": "true",
+    "attrName": "headlight",
+    "attrType": "boolean"
+  },
+  "fields": {
+    "recvTime": [
+      "2019-06-14T23:03:33.553Z"
+    ]
+  },
+  "sort": [
+    1560553413553
+  ]
+}
+```
+```json
+{
+  "_index": "cygnus-vehicles-4wheels-car1-car-2019.06.15",
+  "_type": "cygnus_type",
+  "_id": "1560553413553-A0E90CE6731793853243F34B73DF423A",
+  "_version": 1,
+  "_score": null,
+  "_source": {
+    "recvTime": "2019-06-15T08:03:33.553+0900",
+    "entityType": "car",
+    "attrMetadata": [],
+    "entityId": "car1",
+    "attrValue": "74.6",
+    "attrName": "oil_level",
+    "attrType": "float"
+  },
+  "fields": {
+    "recvTime": [
+      "2019-06-14T23:03:33.553Z"
+    ]
+  },
+  "sort": [
+    1560553413553
+  ]
+}
+```
+```json
+{
+  "_index": "cygnus-vehicles-4wheels-car1-car-2019.06.15",
+  "_type": "cygnus_type",
+  "_id": "1560553413553-FE5C0A175BDF9956D0D3DAAFC0C3CFF9",
+  "_version": 1,
+  "_score": null,
+  "_source": {
+    "recvTime": "2019-06-15T08:03:33.553+0900",
+    "entityType": "car",
+    "attrMetadata": [],
+    "entityId": "car1",
+    "attrValue": "112.9",
+    "attrName": "speed",
+    "attrType": "float"
+  },
+  "fields": {
+    "recvTime": [
+      "2019-06-14T23:03:33.553Z"
+    ]
+  },
+  "sort": [
+    1560553413553
+  ]
+}
+```
 
-    {
-      "_index": "idx_-prefix-1-vehicles-4wheels-2019.06.13",
-      "_type": "cygnus_type",
-      "_id": "1560410492045-CDCE5B76B4E507455E43748C66A6544E",
-      "_version": 1,
-      "_score": null,
-      "_source": {
-        "recvTime": "2019-06-13T16:21:32.045+0900",
-        "entityType": "car",
-        "attrMetadata": [],
-        "entityId": "car1",
-        "attrValue": "true",
-        "attrName": "headlight",
-        "attrType": "boolean"
-      },
-      "fields": {
-        "recvTime": [
-          "2019-06-13T07:21:32.045Z"
-        ]
-      },
-      "sort": [
-        1560410492045
-      ]
-    }
+The generated `mapping_type` of this index is like below:
 
-    {
-      "_index": "idx_-prefix-1-vehicles-4wheels-2019.06.13",
-      "_type": "cygnus_type",
-      "_id": "1560410492045-1542A836CA541586B42516D054EBD187",
-      "_version": 1,
-      "_score": null,
-      "_source": {
-        "recvTime": "2019-06-13T16:21:32.045+0900",
-        "entityType": "car",
-        "attrMetadata": [],
-        "entityId": "car1",
-        "attrValue": "74.6",
-        "attrName": "oil_level",
-        "attrType": "float"
-      },
-      "fields": {
-        "recvTime": [
-          "2019-06-13T07:21:32.045Z"
-        ]
-      },
-      "sort": [
-        1560410492045
-      ]
+```json
+{
+  "cygnus-vehicles-4wheels-car1-car-2019.06.15": {
+    "mappings": {
+      "cygnus_type": {
+        "properties": {
+          "attrName": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "attrType": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "attrValue": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "entityId": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "entityType": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "recvTime": {
+            "type": "date"
+          }
+        }
+      }
     }
-
-    {
-      "_index": "idx_-prefix-1-vehicles-4wheels-2019.06.13",
-      "_type": "cygnus_type",
-      "_id": "1560410492045-D6CDC64848D72A71AE385CCD16D71CEA",
-      "_version": 1,
-      "_score": null,
-      "_source": {
-        "recvTime": "2019-06-13T16:21:32.045+0900",
-        "entityType": "car",
-        "attrMetadata": [],
-        "entityId": "car1",
-        "attrValue": "112.9",
-        "attrName": "speed",
-        "attrType": "float"
-      },
-      "fields": {
-        "recvTime": [
-          "2019-06-13T07:21:32.045Z"
-        ]
-      },
-      "sort": [
-        1560410492045
-      ]
-    }
+  }
+}
+```
 
 [Top](#top)
 
 #### <a name="section1.3.4"></a>Column-like storing
 Assuming `attr_persistence=column` and `cast_value=true` as configuration parameters, then `NGSIElasticsearchSink` will persist a record within its index as:
 
-    {
-      "_index": "idx_-prefix-1-vehicles-4wheels-2019.06.13",
-      "_type": "cygnus_type",
-      "_id": "1560406984429-A9F56B9055EC751FD7E5941C43C90F29",
-      "_version": 1,
-      "_score": null,
-      "_source": {
-        "oil_level": 74.6,
-        "recvTime": "2019-06-13T15:23:04.429+0900",
-        "driver": "Jhon",
-        "entityType": "car",
-        "entityId": "car1",
-        "speed": 112.9,
-        "headlight": true
-      },
-      "fields": {
-        "recvTime": [
-          "2019-06-13T06:23:04.429Z"
-        ]
-      },
-      "sort": [
-        1560406984429
-      ]
-    }
+```json
+{
+  "_index": "cygnus-vehicles-4wheels-car1-car-30ecbfb71797b22d45b1458d33e2a995-2019.06.15",
+  "_type": "cygnus_type",
+  "_id": "1560554072316-C9ABB55067F46D870218733ABE2F4BA8",
+  "_version": 1,
+  "_score": null,
+  "_source": {
+    "oil_level": 74.6,
+    "recvTime": "2019-06-15T08:14:32.316+0900",
+    "driver": "Jhon",
+    "entityType": "car",
+    "entityId": "car1",
+    "speed": 112.9,
+    "headlight": true
+  },
+  "fields": {
+    "recvTime": [
+      "2019-06-14T23:14:32.316Z"
+    ]
+  },
+  "sort": [
+    1560554072316
+  ]
+}
+```
 
-Because `cast_value` parameter is set as true, Elasticsearch handles the `speed` and `oil_level` as **number**, `driver` as **string**, and `headlight` as **boolean**.
+Because `cast_value` parameter is set as true, Elasticsearch handles the `speed` and `oil_level` as **float**, `driver` as **text**, and `headlight` as **boolean**.
+
+The generated `mapping_type` of this index is like below:
+
+```json
+{
+  "cygnus-vehicles-4wheels-car1-car-30ecbfb71797b22d45b1458d33e2a995-2019.06.15": {
+    "mappings": {
+      "cygnus_type": {
+        "properties": {
+          "driver": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "entityId": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "entityType": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "headlight": {
+            "type": "boolean"
+          },
+          "oil_level": {
+            "type": "float"
+          },
+          "recvTime": {
+            "type": "date"
+          },
+          "speed": {
+            "type": "float"
+          }
+        }
+      }
+    }
+  }
+}
+```
 
 [Top](#top)
 
@@ -298,8 +460,8 @@ Because `cast_value` parameter is set as true, Elasticsearch handles the `speed`
 | timezone | no | UTC | timezone to be used as a document's timestamp |
 | cast\_value | no | false | true if cast the attrValue using attrType ("true" or "false") |
 | cache\_flash\_interval\_sec | no | 0 | 0 if notified data will be persisted to Elasticsearch immediately. positive integer if notified data are cached on NGSIElasticsearchSink's memory and will be persisted to Elasticsearch periodically every `cache_flash_interval_sec` |
-| backend.max\_conns | no | 500 | Maximum number of connections allowed for a Http-based HDFS backend |
-| backend.max\_conns\_per\_route | no | 100 | Maximum number of connections per route allowed for a Http-based HDFS backend |
+| backend.max\_conns | no | 500 | Maximum number of connections allowed for a Http-based Elasticsearch backend |
+| backend.max\_conns\_per\_route | no | 100 | Maximum number of connections per route allowed for a Http-based Elasticsearch backend |
 
 A configuration example could be:
 
@@ -323,10 +485,74 @@ A configuration example could be:
 
 [Top](#top)
 
-### <a neme="section2.2"></a>Use cases
+### <a name="section2.2"></a>Use cases
 Use `NGSIElasticsearchSink` if you are looking for a Json-based full-text search engine.
 
 [Top](#top)
 
 ### <a name="section2.3"></a>Important notes
-#### <a name="section2.3.1"></a>About batching
+#### <a name="section2.3.1"></a>About caching
+`NGSIElasticsearchSink` stores the date to Elasticsearch by using [Elasticsearch's REST API](https://www.elastic.co/guide/en/elasticsearch/reference/current/docs.html) (see [elasticsearch\_backend.md](/doc/cygnus-common/backends_catalogue/elasticsearch_backend.md)). Unfortunately this round trip needs a bit time. Therefore, when NGSIElasticsearchSink is notified high frequently, it may be delayed until the notified data is stored in Elasticsearch.
+
+In such a case, please consider using `cache_flash_interval_sec`. When you set the `cache_flash_interval_sec` parameter as not zero positive integer, the data to be stored are cached temporally in cygnus's process, and bulk inserted to Elasticsearch every configured seconds. When Cygnus is shutted down gracefully, the cached data will be flashed and be stored immediatelry to Elasticsearch.
+
+**CAUTION**  
+This `cache_flash_interval_sec` parameter is useful to improve the storing performance. However, if the Cygnus process aborts unexpectedly, the cached data may be lost and never recovered. When you set the `cache_flash_interval_sec` parameter, you have to always consider **the risk that the cached data may be lost**.
+
+[Top](#top)
+
+#### <a name="section2.3.2"></a>About `recvTime` and `TimeInstant` metadata
+By default, `NGSIElasticsearchSink` stores the notification reception timestamp. Nevertheless, if a metadata named `TimeInstant` is notified, then such metadata value is used instead of the reception timestamp.
+
+* Row-like storing
+
+When NGSIElasticsearchSink is configured as `Row-like storing` and the notified attribute has `TimeInstant` metadata, its `TimeInstant` is used as the timestamp of the attribute record.
+
+* Column-like storing
+
+When NGSIElasticsearchSink is configured as `Column-like storing` and the **first** notified attribute has `TimeInstant` metadata, the **first** `TimeInstant` is used as the timestamp of the document record.
+
+[Top](#top)
+
+#### <a name="section2.3.3"></a>About supported versions of Elasticsearch
+`NGSIElasticsearchSink` has been tested with the following versions of Elasticsearch:
+
+* 6.3
+
+[Top](#top)
+
+## <a name="section3"></a>Programmers guide
+### <a name="section3.1"></a>`NGSIElasticsearchSink` class
+As any other NGSI-like sink, `NGSIElasticsearchSink` extends the base `NGSISink`. The methods that are extended are:
+
+    void persistBatch(Batch batch) throws Exception;
+
+A `Batch` contains a set of `NGSIEvent` objects, which are the result of parsing the notified context data events. Data within the batch is classified by destination, and in the end, a destination specifies the Elasticsearch index where the data is going to be persisted. Thus, each destination is iterated in order to compose a per-destination data string to be persisted thanks to any `ElasticsearchBackend` implementation.  
+If `cache_flash_interval_sec` is not configured or zero, the notifed data is stored to Elasticsearch immediately at this time. Otherwise, the notified data are cached in Cygnus's process and are not stored at this time.
+
+    public void start();
+
+An implementation of `ElasticsearchBackend` is created. This must be done at the `start()` method and not in the constructor since the invoking sequence is `NGSIElasticsearchSink()` (contructor), `configure()` and `start()`.  
+If `cache_flash_interval_sec` is configured, `SingleThreadScheduledExecutor` is created. In this case, this executer has the responsibility for storing cached data to Elasticsearch.
+
+    public void stop();
+
+If `cache_flash_interval_sec` is configured, the created executer stores the cached data if exist before the Cygnus process will be shutted down.
+
+    public void configure(Context);
+
+A complete configuration as the described above is read from the given `Context` instance.
+
+[Top](#top)
+
+### <a name="section3.2"></a>`ElasticsearchBackend` class
+This is a convenience backend class for Elasticsearch that provides methods to persist the context data to Elasticsearch. `ElasticsearchBackend` uses the REST API of Elasticsearch in order to persist the context data, so `ElasticsearchBackend` extends the `HttpBackend`. The public methods are:
+
+    public JsonResponse bulkInsert(String index, String type, List<Map<String, String>> data) throws CygnusPersistenceError, CygnusRuntimeError;
+
+The given `data` is bulk inserted to `index` of Elasticsearch. The mapping type of this `index` is created automatically as named `type`.
+
+### <a name="section3.3"></a>Authentication and authorization
+Elasticsearch has no built-in mechanism to authenticate and authorize the API requester. Thus, `NGSIElasticsearchSink` has no functionality about authentication and authorization.
+
+[Top](#top)
